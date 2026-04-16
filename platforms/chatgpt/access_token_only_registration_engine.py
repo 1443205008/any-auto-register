@@ -113,9 +113,12 @@ class AccessTokenOnlyRegistrationEngine:
 
     def run(self) -> RegistrationResult:
         result = RegistrationResult(success=False, logs=self.logs)
-        stop_at_about_you = self._read_bool_config(
-            "chatgpt_stop_at_about_you",
-            fallback_keys=("chatgpt_register_only_until_about_you",),
+        stop_after_about_you_submission = self._read_bool_config(
+            "chatgpt_stop_after_about_you_submission",
+            fallback_keys=(
+                "chatgpt_stop_at_about_you",
+                "chatgpt_register_only_until_about_you",
+            ),
             default=False,
         )
         try:
@@ -149,8 +152,8 @@ class AccessTokenOnlyRegistrationEngine:
 
                     self._log(f"邮箱: {email_addr}, 密码: {pwd}")
                     self._log(f"注册信息: {first_name} {last_name}, 生日: {birthdate}")
-                    if stop_at_about_you:
-                        self._log("已启用仅注册模式：到达 about_you 后立即结束，不继续提取 workspace / token")
+                    if stop_after_about_you_submission:
+                        self._log("已启用仅注册模式：姓名和生日提交成功后立即结束，不继续提取 workspace / token")
 
                     # 使用包装器为底层客户端提供接码服务
                     skymail_adapter = EmailServiceAdapter(self.email_service, email_addr, self._log)
@@ -172,7 +175,8 @@ class AccessTokenOnlyRegistrationEngine:
                         last_name,
                         birthdate,
                         skymail_adapter,
-                        stop_before_about_you_submission=stop_at_about_you,
+                        stop_before_about_you_submission=False,
+                        stop_after_about_you_submission=stop_after_about_you_submission,
                     )
 
                     if not success:
@@ -183,23 +187,23 @@ class AccessTokenOnlyRegistrationEngine:
                         result.error_message = last_error
                         return result
 
-                    if stop_at_about_you:
-                        if msg != "pending_about_you_submission":
+                    if stop_after_about_you_submission:
+                        if msg != "pending_workspace_resolution":
                             result.error_message = (
-                                "仅注册模式要求流程停在 about_you，但当前未到达该阶段: "
+                                "仅注册模式要求流程在姓名和生日提交后停止，但当前未到达该阶段: "
                                 f"{msg or 'unknown'}"
                             )
                             return result
-                        self._log("已按要求停在 about_you，结束流程")
+                        self._log("已按要求在姓名和生日提交后停止，结束流程")
                         result.success = True
                         result.account_id = ""
-                        result.source = "about_you_pending"
+                        result.source = "post_about_you_pending"
                         result.metadata = {
                             "browser_mode": self.browser_mode,
                             "device_id": getattr(chatgpt_client, "device_id", ""),
-                            "chatgpt_registration_stage": "about_you",
+                            "chatgpt_registration_stage": "post_about_you",
                             "chatgpt_registration_complete": False,
-                            "chatgpt_stop_at_about_you": True,
+                            "chatgpt_stop_after_about_you_submission": True,
                         }
                         return result
 

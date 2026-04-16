@@ -55,7 +55,7 @@ class ChatGPTRegistrationModeAdapterTests(unittest.TestCase):
         )
         self.assertFalse(account.extra["chatgpt_has_refresh_token_solution"])
 
-    def test_build_account_marks_about_you_pending_result_as_incomplete(self):
+    def test_build_account_marks_post_about_you_pending_result_as_incomplete(self):
         adapter = build_chatgpt_registration_mode_adapter(
             {"chatgpt_registration_mode": "refresh_token"}
         )
@@ -71,11 +71,11 @@ class ChatGPTRegistrationModeAdapterTests(unittest.TestCase):
                 "id_token": "",
                 "session_token": "",
                 "workspace_id": "",
-                "source": "about_you_pending",
+                "source": "post_about_you_pending",
                 "metadata": {
-                    "chatgpt_registration_stage": "about_you",
+                    "chatgpt_registration_stage": "post_about_you",
                     "chatgpt_registration_complete": False,
-                    "chatgpt_stop_at_about_you": True,
+                    "chatgpt_stop_after_about_you_submission": True,
                 },
             },
         )()
@@ -83,8 +83,8 @@ class ChatGPTRegistrationModeAdapterTests(unittest.TestCase):
         account = adapter.build_account(result, fallback_password="fallback")
 
         self.assertFalse(account.extra["chatgpt_registration_complete"])
-        self.assertEqual(account.extra["chatgpt_registration_stage"], "about_you")
-        self.assertTrue(account.extra["chatgpt_stop_at_about_you"])
+        self.assertEqual(account.extra["chatgpt_registration_stage"], "post_about_you")
+        self.assertTrue(account.extra["chatgpt_stop_after_about_you_submission"])
 
     def test_access_token_only_adapter_passes_runtime_context_to_engine(self):
         created = {}

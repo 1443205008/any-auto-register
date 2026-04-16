@@ -949,6 +949,7 @@ class ChatGPTClient:
         birthdate,
         skymail_client,
         stop_before_about_you_submission=False,
+        stop_after_about_you_submission=False,
         otp_wait_timeout=600,
         otp_resend_wait_timeout=300,
     ):
@@ -971,6 +972,7 @@ class ChatGPTClient:
         self._log(
             "注册状态机参数: "
             f"stop_before_about_you_submission={'on' if stop_before_about_you_submission else 'off'}, "
+            f"stop_after_about_you_submission={'on' if stop_after_about_you_submission else 'off'}, "
             f"otp_wait_timeout={otp_wait_timeout}s, otp_resend_wait_timeout={otp_resend_wait_timeout}s"
         )
 
@@ -1133,6 +1135,12 @@ class ChatGPTClient:
                 account_created = True
                 state = next_state
                 self.last_registration_state = state
+                if stop_after_about_you_submission:
+                    self._log(
+                        "姓名和生日已提交成功，按要求在 about_you 之后停止。"
+                        "下一步不再继续 workspace / token 流程。"
+                    )
+                    return True, "pending_workspace_resolution"
                 continue
 
             if self._state_requires_navigation(state):

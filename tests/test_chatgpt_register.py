@@ -224,9 +224,9 @@ class RefreshTokenRegistrationEngineTests(unittest.TestCase):
         self.assertEqual(call_args[0].args[0], "user1@example.com")
         self.assertEqual(call_args[1].args[0], "user2@example.com")
 
-    def test_run_can_stop_at_about_you_without_oauth_followup(self):
+    def test_run_can_stop_after_about_you_submission_without_oauth_followup(self):
         engine = self._make_engine(
-            extra_config={"chatgpt_stop_at_about_you": True}
+            extra_config={"chatgpt_stop_after_about_you_submission": True}
         )
         register_client = mock.Mock()
         register_client.device_id = "device-fixed"
@@ -234,7 +234,7 @@ class RefreshTokenRegistrationEngineTests(unittest.TestCase):
         register_client.impersonate = "chrome136"
         register_client.register_complete_flow.return_value = (
             True,
-            "pending_about_you_submission",
+            "pending_workspace_resolution",
         )
 
         with mock.patch.object(
@@ -245,30 +245,31 @@ class RefreshTokenRegistrationEngineTests(unittest.TestCase):
             result = engine.run()
 
         self.assertTrue(result.success)
-        self.assertEqual(result.source, "about_you_pending")
+        self.assertEqual(result.source, "post_about_you_pending")
         self.assertEqual(
             (result.metadata or {}).get("chatgpt_registration_stage"),
-            "about_you",
+            "post_about_you",
         )
         build_oauth_client.assert_not_called()
         kwargs = register_client.register_complete_flow.call_args.kwargs
-        self.assertTrue(kwargs["stop_before_about_you_submission"])
+        self.assertFalse(kwargs["stop_before_about_you_submission"])
+        self.assertTrue(kwargs["stop_after_about_you_submission"])
 
 
 class AccessTokenOnlyRegistrationEngineTests(unittest.TestCase):
-    def test_run_can_stop_at_about_you_without_session_extraction(self):
+    def test_run_can_stop_after_about_you_submission_without_session_extraction(self):
         engine = AccessTokenOnlyRegistrationEngine(
             email_service=DummyEmailService(),
             proxy_url="http://127.0.0.1:7890",
             callback_logger=lambda msg: None,
             max_retries=1,
-            extra_config={"chatgpt_stop_at_about_you": True},
+            extra_config={"chatgpt_stop_after_about_you_submission": True},
         )
         chatgpt_client = mock.Mock()
         chatgpt_client.device_id = "device-fixed"
         chatgpt_client.register_complete_flow.return_value = (
             True,
-            "pending_about_you_submission",
+            "pending_workspace_resolution",
         )
 
         with mock.patch(
@@ -278,11 +279,12 @@ class AccessTokenOnlyRegistrationEngineTests(unittest.TestCase):
             result = engine.run()
 
         self.assertTrue(result.success)
-        self.assertEqual(result.source, "about_you_pending")
+        self.assertEqual(result.source, "post_about_you_pending")
         self.assertFalse((result.metadata or {}).get("chatgpt_registration_complete"))
         chatgpt_client.reuse_session_and_get_tokens.assert_not_called()
         kwargs = chatgpt_client.register_complete_flow.call_args.kwargs
-        self.assertTrue(kwargs["stop_before_about_you_submission"])
+        self.assertFalse(kwargs["stop_before_about_you_submission"])
+        self.assertTrue(kwargs["stop_after_about_you_submission"])
 
 
 class OAuthClientPasswordlessTests(unittest.TestCase):

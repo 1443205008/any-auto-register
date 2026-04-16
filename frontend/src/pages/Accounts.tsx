@@ -792,7 +792,7 @@ export default function Accounts() {
         inbucket_api_url: cfg.inbucket_api_url,
         inbucket_domain: cfg.inbucket_domain,
         inbucket_mailbox_naming: cfg.inbucket_mailbox_naming,
-        chatgpt_stop_at_about_you: values.chatgpt_stop_at_about_you,
+        chatgpt_stop_after_about_you_submission: values.chatgpt_stop_after_about_you_submission,
         cfworker_api_url: cfg.cfworker_api_url,
         cfworker_admin_token: cfg.cfworker_admin_token,
         cfworker_custom_auth: cfg.cfworker_custom_auth,
@@ -1527,11 +1527,11 @@ export default function Accounts() {
                   />
                 </Form.Item>
                 <Form.Item
-                  name="chatgpt_stop_at_about_you"
+                  name="chatgpt_stop_after_about_you_submission"
                   valuePropName="checked"
-                  extra="勾选后只推进到 about-you，不继续 OAuth / workspace / token。"
+                  extra="勾选后会在姓名和生日提交成功后停止，不继续 OAuth / workspace / token。"
                 >
-                  <Checkbox>仅注册到 about-you</Checkbox>
+                  <Checkbox>仅注册到姓名生日提交后</Checkbox>
                 </Form.Item>
               </>
             )}
