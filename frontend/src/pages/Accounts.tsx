@@ -87,6 +87,13 @@ function formatCreatedAt(value?: string) {
   }
 }
 
+function parseSpecifiedInbucketEmails(value: unknown): string[] {
+  return String(value || '')
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 function authStateMeta(state?: string) {
   switch (state) {
     case 'access_token_valid':
@@ -750,6 +757,12 @@ export default function Accounts() {
     try {
       const cfg = await apiFetch('/config')
       const executorType = normalizeExecutorForPlatform(currentPlatform, cfg.default_executor)
+      const inbucketSpecifiedEmails =
+        String(cfg.mail_provider || '').trim() === 'inbucket'
+          ? parseSpecifiedInbucketEmails(values.inbucket_email)
+          : []
+      const effectiveCount =
+        inbucketSpecifiedEmails.length > 0 ? inbucketSpecifiedEmails.length : values.count
       const registerExtra = {
         mail_provider: cfg.mail_provider || 'luckmail',
         applemail_base_url: cfg.applemail_base_url,
@@ -825,7 +838,7 @@ export default function Accounts() {
         method: 'POST',
         body: JSON.stringify({
           platform: currentPlatform,
-          count: values.count,
+          count: effectiveCount,
           concurrency: values.concurrency,
           register_delay_seconds: values.register_delay_seconds || 0,
           executor_type: executorType,
@@ -1513,10 +1526,13 @@ export default function Accounts() {
             </Form.Item>
             <Form.Item
               name="inbucket_email"
-              label="指定邮箱（仅 Inbucket，可选）"
-              extra="支持填写完整邮箱，或只填前缀如 demo；填写后本次任务会固定使用该邮箱。"
+              label="指定邮箱列表（仅 Inbucket，可选）"
+              extra="一行一个邮箱；支持完整邮箱或仅填前缀。填写后会按行依次注册，注册数量自动等于行数。"
             >
-              <Input placeholder="demo 或 demo@mail.example.com" />
+              <Input.TextArea
+                rows={4}
+                placeholder={'demo1\ndemo2@mail.example.com'}
+              />
             </Form.Item>
             {currentPlatform === 'chatgpt' && (
               <>

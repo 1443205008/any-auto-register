@@ -43,6 +43,24 @@ class TaskLogBatchDeleteRequest(BaseModel):
     ids: list[int]
 
 
+def _parse_inbucket_specified_emails(value) -> list[str]:
+    if value is None:
+        return []
+
+    if isinstance(value, (list, tuple, set)):
+        raw_items = list(value)
+    else:
+        raw_items = str(value or "").splitlines()
+
+    emails: list[str] = []
+    for raw_item in raw_items:
+        for part in str(raw_item or "").splitlines():
+            text = str(part or "").strip()
+            if text:
+                emails.append(text)
+    return emails
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -293,6 +311,15 @@ def _prepare_register_request(req: RegisterTaskRequest) -> RegisterTaskRequest:
             "chatgpt": "openai",
         }
         prepared.extra["luckmail_project_code"] = mapping.get(platform, platform)
+    elif mail_provider == "inbucket":
+        specified_emails = _parse_inbucket_specified_emails(
+            prepared.extra.get("inbucket_email_list")
+            or prepared.extra.get("inbucket_email")
+        )
+        if specified_emails:
+            prepared.extra["inbucket_email_list"] = specified_emails
+            prepared.extra["inbucket_email"] = "\n".join(specified_emails)
+            prepared.count = len(specified_emails)
 
     return prepared
 
@@ -416,6 +443,17 @@ def _run_register(task_id: str, req: RegisterTaskRequest):
         _base_extra.update(
             {k: v for k, v in req.extra.items() if v is not None and v != ""}
         )
+        _mail_provider = str(
+            _base_extra.get("mail_provider", "luckmail") or "luckmail"
+        ).strip()
+        _inbucket_specified_emails = (
+            _parse_inbucket_specified_emails(
+                _base_extra.get("inbucket_email_list")
+                or _base_extra.get("inbucket_email")
+            )
+            if _mail_provider == "inbucket"
+            else []
+        )
 
         # 批量预取代理（无固定代理时），减少每线程单独查 DB
         from core.proxy_pool import proxy_pool as _proxy_pool
@@ -440,10 +478,10 @@ def _run_register(task_id: str, req: RegisterTaskRequest):
                         return random.choice(_prefetched_proxies)
             return _proxy_pool.get_next()
 
-        def _build_mailbox(proxy: Optional[str]):
+        def _build_mailbox(proxy: Optional[str], merged_extra: dict):
             return create_mailbox(
-                provider=_base_extra.get("mail_provider", "luckmail"),
-                extra=_base_extra,
+                provider=merged_extra.get("mail_provider", "luckmail"),
+                extra=merged_extra,
                 proxy=proxy,
             )
 
@@ -474,7 +512,13 @@ def _run_register(task_id: str, req: RegisterTaskRequest):
                         next_start_time = time.time() + req.register_delay_seconds
                 control.checkpoint(attempt_id=attempt_id)
 
-                merged_extra = _base_extra
+                merged_extra = dict(_base_extra)
+                if _mail_provider == "inbucket" and _inbucket_specified_emails:
+                    if i < len(_inbucket_specified_emails):
+                        merged_extra["inbucket_email"] = _inbucket_specified_emails[i]
+                current_email = str(
+                    merged_extra.get("inbucket_email") or current_email or ""
+                ).strip()
 
                 _config = RegisterConfig(
                     executor_type=req.executor_type,
@@ -482,7 +526,7 @@ def _run_register(task_id: str, req: RegisterTaskRequest):
                     proxy=_proxy,
                     extra=merged_extra,
                 )
-                _mailbox = _build_mailbox(_proxy)
+                _mailbox = _build_mailbox(_proxy, merged_extra)
                 _platform = PlatformCls(config=_config, mailbox=_mailbox)
                 _platform._task_attempt_token = attempt_id
                 _platform._log_fn = lambda msg: _log(task_id, msg)

@@ -1,7 +1,13 @@
 import unittest
 from unittest.mock import patch
 
-from api.tasks import RegisterTaskRequest, _create_task_record, _run_register, _task_store
+from api.tasks import (
+    RegisterTaskRequest,
+    _create_task_record,
+    _prepare_register_request,
+    _run_register,
+    _task_store,
+)
 from core.base_mailbox import BaseMailbox, MailboxAccount
 from core.base_platform import Account, BasePlatform
 
@@ -81,6 +87,26 @@ class _FakeChatGPTWorkspacePlatform(BasePlatform):
         return True
 
 
+class _FakeMailboxEchoPlatform(BasePlatform):
+    name = "fake"
+    display_name = "Fake"
+
+    def __init__(self, config=None, mailbox=None):
+        super().__init__(config)
+        self.mailbox = mailbox
+
+    def register(self, email: str, password: str = None) -> Account:
+        account = self.mailbox.get_email()
+        return Account(
+            platform="fake",
+            email=account.email,
+            password=password or "pw",
+        )
+
+    def check_valid(self, account: Account) -> bool:
+        return True
+
+
 class RegisterTaskControlFlowTests(unittest.TestCase):
     def _build_request(self, **overrides):
         payload = {
@@ -146,6 +172,62 @@ class RegisterTaskControlFlowTests(unittest.TestCase):
 
         self.assertIn("workspace进度: 1/2", joined_logs)
         self.assertIn("workspace进度: 2/2", joined_logs)
+
+    def test_prepare_register_request_uses_inbucket_email_line_count(self):
+        req = RegisterTaskRequest(
+            platform="fake",
+            count=1,
+            concurrency=3,
+            extra={
+                "mail_provider": "inbucket",
+                "inbucket_api_url": "https://mail.example.com",
+                "inbucket_domain": "mail.example.com",
+                "inbucket_email": "alpha\n\nbeta@mail.example.com\n gamma ",
+            },
+        )
+
+        prepared = _prepare_register_request(req)
+
+        self.assertEqual(prepared.count, 3)
+        self.assertEqual(
+            prepared.extra.get("inbucket_email_list"),
+            ["alpha", "beta@mail.example.com", "gamma"],
+        )
+
+    def test_run_register_assigns_inbucket_email_lines_per_attempt(self):
+        task_id = "task-inbucket-email-list"
+        req = _prepare_register_request(
+            RegisterTaskRequest(
+                platform="fake",
+                count=1,
+                concurrency=1,
+                extra={
+                    "mail_provider": "inbucket",
+                    "inbucket_api_url": "https://mail.example.com",
+                    "inbucket_domain": "mail.example.com",
+                    "inbucket_email": "alpha\nbeta@mail.example.com",
+                },
+            )
+        )
+        _create_task_record(task_id, req, "manual", None)
+        saved_emails: list[str] = []
+
+        with (
+            patch("core.registry.get", return_value=_FakeMailboxEchoPlatform),
+            patch(
+                "core.db.save_account",
+                side_effect=lambda account: saved_emails.append(account.email) or account,
+            ),
+            patch("api.tasks._save_task_log"),
+            patch("api.tasks._auto_upload_integrations"),
+        ):
+            _run_register(task_id, req)
+
+        self.assertEqual(req.count, 2)
+        self.assertEqual(
+            saved_emails,
+            ["alpha@mail.example.com", "beta@mail.example.com"],
+        )
 
 
 if __name__ == "__main__":

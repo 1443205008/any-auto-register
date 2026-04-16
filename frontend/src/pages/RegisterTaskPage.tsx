@@ -33,6 +33,13 @@ function resolveEffectiveMailProvider(mailProvider: string, mailImportSource: st
   return mailImportSource === 'applemail' ? 'applemail' : 'microsoft'
 }
 
+function parseSpecifiedInbucketEmails(value: unknown): string[] {
+  return String(value || '')
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 export default function RegisterTaskPage() {
   const [form] = Form.useForm()
   const [task, setTask] = useState<any>(null)
@@ -116,6 +123,12 @@ export default function RegisterTaskPage() {
   const submit = async () => {
     const values = await form.validateFields()
     const effectiveMailProvider = resolveEffectiveMailProvider(values.mail_provider, values.mail_import_source)
+    const inbucketSpecifiedEmails =
+      effectiveMailProvider === 'inbucket'
+        ? parseSpecifiedInbucketEmails(values.inbucket_email)
+        : []
+    const effectiveCount =
+      inbucketSpecifiedEmails.length > 0 ? inbucketSpecifiedEmails.length : values.count
     const registerExtra = {
       mail_provider: effectiveMailProvider,
       applemail_base_url: values.applemail_base_url,
@@ -196,7 +209,7 @@ export default function RegisterTaskPage() {
         platform: values.platform,
         email: values.email || null,
         password: values.password || null,
-        count: values.count,
+        count: effectiveCount,
         concurrency: values.concurrency,
         register_delay_seconds: values.register_delay_seconds || 0,
         proxy: values.proxy || null,
@@ -578,10 +591,13 @@ export default function RegisterTaskPage() {
               </Form.Item>
               <Form.Item
                 name="inbucket_email"
-                label="指定邮箱（可选）"
-                extra="支持填写完整邮箱，或只填前缀如 demo；填写后本次任务会固定使用该邮箱，建议 count=1。"
+                label="指定邮箱列表（可选）"
+                extra="一行一个邮箱；支持完整邮箱或仅填前缀。填写后会按行依次注册，注册数量自动等于行数。"
               >
-                <Input placeholder="demo 或 demo@mail.example.com" />
+                <Input.TextArea
+                  rows={4}
+                  placeholder={'demo1\ndemo2@mail.example.com'}
+                />
               </Form.Item>
               <Form.Item
                 name="inbucket_mailbox_naming"
