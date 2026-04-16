@@ -787,6 +787,10 @@ export default function Accounts() {
         freemail_username: cfg.freemail_username,
         freemail_password: cfg.freemail_password,
         freemail_domain: cfg.freemail_domain,
+        inbucket_email: values.inbucket_email,
+        inbucket_api_url: cfg.inbucket_api_url,
+        inbucket_domain: cfg.inbucket_domain,
+        inbucket_mailbox_naming: cfg.inbucket_mailbox_naming,
         cfworker_api_url: cfg.cfworker_api_url,
         cfworker_admin_token: cfg.cfworker_admin_token,
         cfworker_custom_auth: cfg.cfworker_custom_auth,
@@ -1504,6 +1508,13 @@ export default function Accounts() {
             </Form.Item>
             <Form.Item name="register_delay_seconds" label="每个注册延迟(秒)" initialValue={0}>
               <InputNumber min={0} precision={1} step={0.5} style={{ width: '100%' }} placeholder="0 = 不延迟" />
+            </Form.Item>
+            <Form.Item
+              name="inbucket_email"
+              label="指定邮箱（仅 Inbucket，可选）"
+              extra="支持填写完整邮箱，或只填前缀如 demo；填写后本次任务会固定使用该邮箱。"
+            >
+              <Input placeholder="demo 或 demo@mail.example.com" />
             </Form.Item>
             {currentPlatform === 'chatgpt' && (
               <Form.Item label="ChatGPT Token 方案">

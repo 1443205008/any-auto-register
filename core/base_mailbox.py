@@ -270,6 +270,14 @@ def create_mailbox(
             domain=extra.get("freemail_domain", ""),
             proxy=proxy,
         )
+    elif provider == "inbucket":
+        return InbucketMailbox(
+            api_url=extra.get("inbucket_api_url", ""),
+            domain=extra.get("inbucket_domain", ""),
+            mailbox_naming=extra.get("inbucket_mailbox_naming", "local"),
+            specified_email=extra.get("inbucket_email", ""),
+            proxy=proxy,
+        )
     elif provider == "moemail":
         return MoeMailMailbox(
             api_url=extra.get("moemail_api_url", "https://sall.cc"),
@@ -4396,6 +4404,264 @@ class FreemailMailbox(BaseMailbox):
                     if code:
                         if code in exclude_codes:
                             continue
+                        return code
+            except Exception:
+                pass
+            return None
+
+        return self._run_polling_wait(
+            timeout=timeout,
+            poll_interval=3,
+            poll_once=poll_once,
+        )
+
+
+class InbucketMailbox(BaseMailbox):
+    """Inbucket 自建邮箱服务"""
+
+    def __init__(
+        self,
+        api_url: str = "",
+        domain: str = "",
+        mailbox_naming: str = "local",
+        specified_email: str = "",
+        proxy: str = None,
+    ):
+        self.api = str(api_url or "").strip().rstrip("/")
+        self.domain = self._normalize_domain(domain)
+        self.mailbox_naming = self._normalize_mailbox_naming(mailbox_naming)
+        self.specified_email = str(specified_email or "").strip()
+        self.proxy = build_requests_proxy_config(proxy)
+
+    @staticmethod
+    def _normalize_domain(value: Any) -> str:
+        domain = str(value or "").strip().lower()
+        if domain.startswith("@"):
+            domain = domain[1:]
+        return domain
+
+    @staticmethod
+    def _normalize_mailbox_naming(value: Any) -> str:
+        naming = str(value or "").strip().lower()
+        if naming in {"local", "full", "domain"}:
+            return naming
+        return "local"
+
+    @staticmethod
+    def _generate_local_part() -> str:
+        import string
+
+        prefix = "".join(random.choices(string.ascii_lowercase, k=6))
+        suffix = "".join(random.choices(string.digits, k=4))
+        return f"{prefix}{suffix}"
+
+    def _headers(self) -> dict[str, str]:
+        return {"accept": "application/json"}
+
+    def _require_api(self) -> None:
+        if not self.api:
+            raise RuntimeError("Inbucket 未配置 API URL，请检查 inbucket_api_url")
+
+    def _require_domain(self) -> None:
+        if not self.domain:
+            raise RuntimeError("Inbucket 未配置邮箱域名，请检查 inbucket_domain")
+
+    def _request_json(self, method: str, path: str, *, timeout: int = 15) -> Any:
+        import requests
+
+        response = requests.request(
+            method,
+            f"{self.api}{path}",
+            params=None,
+            json=None,
+            headers=self._headers(),
+            proxies=self.proxy,
+            timeout=timeout,
+        )
+        if response.status_code == 404:
+            return None
+
+        try:
+            payload = response.json()
+        except Exception as exc:
+            preview = (response.text or "")[:200]
+            raise RuntimeError(
+                f"Inbucket API {path} 返回非 JSON: HTTP {response.status_code} {preview}"
+            ) from exc
+
+        if response.status_code >= 400:
+            message = str(payload or response.text or f"HTTP {response.status_code}").strip()
+            raise RuntimeError(f"Inbucket API {path} 失败: {message}")
+        return payload
+
+    def _mailbox_name_from_email(self, email: str) -> str:
+        text = str(email or "").strip()
+        local, _, domain = text.partition("@")
+        local = local.split("+", 1)[0]
+        domain = domain or self.domain
+
+        if self.mailbox_naming == "full" and domain:
+            return f"{local}@{domain}"
+        if self.mailbox_naming == "domain":
+            return domain
+        return local
+
+    def _resolve_requested_email(self) -> str:
+        text = str(self.specified_email or "").strip()
+        if not text:
+            return ""
+
+        if "@" not in text:
+            self._require_domain()
+            return f"{text}@{self.domain}"
+        return text
+
+    def _mailbox_path(self, email: str) -> str:
+        from urllib.parse import quote
+
+        return quote(self._mailbox_name_from_email(email), safe="@")
+
+    def _list_messages(self, email: str) -> list[dict[str, Any]]:
+        self._require_api()
+        payload = self._request_json(
+            "GET",
+            f"/api/v1/mailbox/{self._mailbox_path(email)}",
+            timeout=10,
+        )
+        if payload is None:
+            return []
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if isinstance(payload, dict):
+            messages = payload.get("messages") or payload.get("data") or []
+            if isinstance(messages, list):
+                return [item for item in messages if isinstance(item, dict)]
+        return []
+
+    def _get_message_detail(self, email: str, message_id: str) -> dict[str, Any]:
+        from urllib.parse import quote
+
+        self._require_api()
+        payload = self._request_json(
+            "GET",
+            f"/api/v1/mailbox/{self._mailbox_path(email)}/{quote(str(message_id or '').strip(), safe='')}",
+            timeout=10,
+        )
+        return payload if isinstance(payload, dict) else {}
+
+    def get_email(self) -> MailboxAccount:
+        self._require_api()
+        email = self._resolve_requested_email()
+        if not email:
+            self._require_domain()
+            email = f"{self._generate_local_part()}@{self.domain}"
+        mailbox_name = self._mailbox_name_from_email(email)
+        self._log(f"[Inbucket] 本地拼装邮箱: {email} (mailbox={mailbox_name})")
+        return MailboxAccount(
+            email=email,
+            account_id=email,
+            extra={
+                "provider": "inbucket",
+                "domain": self.domain,
+                "mailbox_name": mailbox_name,
+                "mailbox_naming": self.mailbox_naming,
+            },
+        )
+
+    def get_current_ids(self, account: MailboxAccount) -> set:
+        try:
+            return {
+                str(message.get("id"))
+                for message in self._list_messages(account.email)
+                if message.get("id") is not None
+            }
+        except Exception:
+            return set()
+
+    def wait_for_code(
+        self,
+        account: MailboxAccount,
+        keyword: str = "",
+        timeout: int = 120,
+        before_ids: set = None,
+        code_pattern: str = None,
+        **kwargs,
+    ) -> str:
+        import re
+
+        self._require_api()
+        seen = {str(mid) for mid in (before_ids or set())}
+        exclude_codes = {
+            str(code) for code in (kwargs.get("exclude_codes") or set()) if code
+        }
+
+        def _flatten_header(value: Any) -> str:
+            if isinstance(value, list):
+                return " ".join(str(item or "") for item in value)
+            return str(value or "")
+
+        def poll_once() -> Optional[str]:
+            try:
+                messages = sorted(
+                    self._list_messages(account.email),
+                    key=lambda item: str(item.get("id") or ""),
+                    reverse=True,
+                )
+                for message in messages:
+                    message_id = str(message.get("id") or "").strip()
+                    if not message_id or message_id in seen:
+                        continue
+                    seen.add(message_id)
+
+                    detail = self._get_message_detail(account.email, message_id)
+                    body = detail.get("body") if isinstance(detail, dict) else {}
+                    header = detail.get("header") if isinstance(detail, dict) else {}
+                    if not isinstance(body, dict):
+                        body = {}
+                    if not isinstance(header, dict):
+                        header = {}
+
+                    recipient_text = " ".join(
+                        [
+                            str(message.get("to") or ""),
+                            str(detail.get("to") or ""),
+                            _flatten_header(header.get("To")),
+                            _flatten_header(header.get("Delivered-To")),
+                            _flatten_header(header.get("X-Original-To")),
+                        ]
+                    ).strip()
+                    if recipient_text and str(account.email or "").strip():
+                        if str(account.email).strip().lower() not in recipient_text.lower():
+                            continue
+
+                    header_text = " ".join(
+                        _flatten_header(value) for value in header.values()
+                    ).strip()
+                    search_text = " ".join(
+                        [
+                            str(message.get("subject") or ""),
+                            str(message.get("from") or ""),
+                            str(detail.get("subject") or ""),
+                            str(detail.get("from") or ""),
+                            str(body.get("text") or ""),
+                            str(body.get("html") or ""),
+                            header_text,
+                        ]
+                    ).strip()
+                    search_text = self._decode_raw_content(search_text) or search_text
+                    search_text = re.sub(
+                        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+                        "",
+                        search_text,
+                    )
+                    if keyword and keyword.lower() not in search_text.lower():
+                        continue
+
+                    code = self._safe_extract(search_text, code_pattern)
+                    if code and code in exclude_codes:
+                        continue
+                    if code:
+                        self._log(f"[Inbucket] 收到验证码: {code}")
                         return code
             except Exception:
                 pass

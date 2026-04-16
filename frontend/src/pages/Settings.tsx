@@ -36,6 +36,7 @@ const SELECT_FIELDS: Record<string, { label: string; value: string }[]> = {
     { label: 'GPTMail', value: 'gptmail' },
     { label: 'OpenTrashMail', value: 'opentrashmail' },
     { label: 'Freemail（自建 CF Worker）', value: 'freemail' },
+    { label: 'Inbucket（自建收件箱）', value: 'inbucket' },
     { label: 'CF Worker（自建域名）', value: 'cfworker' },
   ],
   maliapi_auto_domain_strategy: [
@@ -56,6 +57,11 @@ const SELECT_FIELDS: Record<string, { label: string; value: string }[]> = {
   outlook_backend: [
     { label: 'Graph（默认）', value: 'graph' },
     { label: 'IMAP', value: 'imap' },
+  ],
+  inbucket_mailbox_naming: [
+    { label: 'local（按本地名）', value: 'local' },
+    { label: 'full（完整邮箱）', value: 'full' },
+    { label: 'domain（按域名，不建议并发）', value: 'domain' },
   ],
   luckmail_email_type: [
     { label: '自动 / 留空', value: '' },
@@ -121,6 +127,15 @@ const TAB_ITEMS = [
           { key: 'freemail_username', label: '用户名（可选）' },
           { key: 'freemail_password', label: '密码（可选）', secret: true },
           { key: 'freemail_domain', label: '邮箱域名（可选）', placeholder: 'example.com' },
+        ],
+      },
+      {
+        title: 'Inbucket',
+        desc: '自建 Inbucket 收件箱；本地拼装邮箱地址后通过 REST API 轮询收件',
+        fields: [
+          { key: 'inbucket_api_url', label: 'API URL', placeholder: 'https://mail.example.com' },
+          { key: 'inbucket_domain', label: '邮箱域名', placeholder: 'mail.example.com' },
+          { key: 'inbucket_mailbox_naming', label: 'Mailbox Naming', type: 'select' },
         ],
       },
       {
@@ -420,6 +435,7 @@ interface TabConfig {
 const MAILBOX_SECTION_FIELD_KEY_BY_PROVIDER: Record<string, string> = {
   laoudo: 'laoudo_email',
   freemail: 'freemail_api_url',
+  inbucket: 'inbucket_api_url',
   moemail: 'moemail_api_url',
   skymail: 'skymail_api_base',
   cloudmail: 'cloudmail_api_base',
@@ -434,7 +450,7 @@ const MAILBOX_SECTION_FIELD_KEY_BY_PROVIDER: Record<string, string> = {
 }
 
 const MAILBOX_SECTION_INDEX_BY_PROVIDER: Record<string, number> = {
-  tempmail_lol: 10,
+  tempmail_lol: 12,
 }
 
 function splitMailboxSections(sections: SectionConfig[], mailProvider: string) {
@@ -1788,6 +1804,9 @@ export default function Settings() {
       }
       if (!data.gptmail_base_url) {
         data.gptmail_base_url = 'https://mail.chatgpt.org.uk'
+      }
+      if (!data.inbucket_mailbox_naming) {
+        data.inbucket_mailbox_naming = 'local'
       }
       if (!data.maliapi_base_url) {
         data.maliapi_base_url = 'https://maliapi.215.im/v1'

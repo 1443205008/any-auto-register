@@ -25,6 +25,9 @@ CONFIG_KEYS = [
     "freemail_username",
     "freemail_password",
     "freemail_domain",
+    "inbucket_api_url",
+    "inbucket_domain",
+    "inbucket_mailbox_naming",
     "moemail_api_url",
     "moemail_api_key",
     "skymail_api_base",
@@ -136,6 +139,8 @@ def get_config():
         all_cfg["outlook_backend"] = "graph"
     if not all_cfg.get("gptmail_base_url"):
         all_cfg["gptmail_base_url"] = "https://mail.chatgpt.org.uk"
+    if not all_cfg.get("inbucket_mailbox_naming"):
+        all_cfg["inbucket_mailbox_naming"] = "local"
     if not all_cfg.get("luckmail_base_url"):
         all_cfg["luckmail_base_url"] = "https://mails.luckyous.com/"
     if not str(all_cfg.get("contribution_enabled", "") or "").strip():

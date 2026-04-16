@@ -141,6 +141,7 @@
 | GPTMail | `gptmail` | 基于 GPTMail API 生成临时邮箱并轮询邮件，支持已知域名时本地拼装随机地址 |
 | DuckMail | `duckmail` | 临时邮箱方案 |
 | Freemail | `freemail` | 自建邮箱服务 |
+| Inbucket | `inbucket` | 自建 Inbucket 收件箱，按 REST API 轮询邮件 |
 | Laoudo | `laoudo` | 固定邮箱方案 |
 | CF Worker | `cfworker` | Cloudflare Worker 自建邮箱 |
 

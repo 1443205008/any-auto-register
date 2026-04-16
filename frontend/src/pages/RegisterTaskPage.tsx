@@ -88,6 +88,9 @@ export default function RegisterTaskPage() {
         freemail_username: cfg.freemail_username || '',
         freemail_password: cfg.freemail_password || '',
         freemail_domain: cfg.freemail_domain || '',
+        inbucket_api_url: cfg.inbucket_api_url || '',
+        inbucket_domain: cfg.inbucket_domain || '',
+        inbucket_mailbox_naming: cfg.inbucket_mailbox_naming || 'local',
         cfworker_api_url: cfg.cfworker_api_url || '',
         cfworker_admin_token: cfg.cfworker_admin_token || '',
         cfworker_custom_auth: cfg.cfworker_custom_auth || '',
@@ -152,6 +155,10 @@ export default function RegisterTaskPage() {
       freemail_username: values.freemail_username,
       freemail_password: values.freemail_password,
       freemail_domain: values.freemail_domain,
+      inbucket_email: values.inbucket_email,
+      inbucket_api_url: values.inbucket_api_url,
+      inbucket_domain: values.inbucket_domain,
+      inbucket_mailbox_naming: values.inbucket_mailbox_naming,
       cfworker_api_url: values.cfworker_api_url,
       cfworker_admin_token: values.cfworker_admin_token,
       cfworker_custom_auth: values.cfworker_custom_auth,
@@ -250,6 +257,7 @@ export default function RegisterTaskPage() {
         outlook_backend: 'graph',
         gptmail_base_url: 'https://mail.chatgpt.org.uk',
         cloudmail_timeout: 30,
+        inbucket_mailbox_naming: 'local',
         count: 1,
         concurrency: 1,
         register_delay_seconds: 0,
@@ -323,6 +331,7 @@ export default function RegisterTaskPage() {
                 { value: 'opentrashmail', label: 'OpenTrashMail' },
                 { value: 'duckmail', label: 'DuckMail' },
                 { value: 'freemail', label: 'Freemail' },
+                { value: 'inbucket', label: 'Inbucket' },
                 { value: 'laoudo', label: 'Laoudo' },
                 { value: 'cfworker', label: 'CF Worker' },
               ]}
@@ -536,6 +545,45 @@ export default function RegisterTaskPage() {
               </Form.Item>
               <Form.Item name="freemail_domain" label="邮箱域名（可选）" extra="填写后会优先使用该域名生成邮箱">
                 <Input placeholder="example.com" />
+              </Form.Item>
+            </>
+          )}
+          {mailProvider === 'inbucket' && (
+            <>
+              <Form.Item
+                name="inbucket_api_url"
+                label="API URL"
+                rules={[{ required: true, message: '请输入 Inbucket 地址' }]}
+                extra="如果 Inbucket 配置了 INBUCKET_WEB_BASEPATH，这里直接填写带前缀的根地址。"
+              >
+                <Input placeholder="https://mail.example.com" />
+              </Form.Item>
+              <Form.Item
+                name="inbucket_domain"
+                label="邮箱域名"
+                rules={[{ required: true, message: '请输入 Inbucket 接收邮件的域名' }]}
+              >
+                <Input placeholder="mail.example.com" />
+              </Form.Item>
+              <Form.Item
+                name="inbucket_email"
+                label="指定邮箱（可选）"
+                extra="支持填写完整邮箱，或只填前缀如 demo；填写后本次任务会固定使用该邮箱，建议 count=1。"
+              >
+                <Input placeholder="demo 或 demo@mail.example.com" />
+              </Form.Item>
+              <Form.Item
+                name="inbucket_mailbox_naming"
+                label="Mailbox Naming"
+                extra="需与 Inbucket 的 INBUCKET_MAILBOXNAMING 保持一致；domain 模式下同域账号会共用一个 mailbox。"
+              >
+                <Select
+                  options={[
+                    { value: 'local', label: 'local（按本地名）' },
+                    { value: 'full', label: 'full（完整邮箱）' },
+                    { value: 'domain', label: 'domain（按域名）' },
+                  ]}
+                />
               </Form.Item>
             </>
           )}
