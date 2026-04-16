@@ -59,6 +59,23 @@ class AccessTokenOnlyRegistrationEngine:
         self.email = None
         self.password = None
         self.logs = []
+
+    def _read_bool_config(
+        self,
+        primary_key: str,
+        *,
+        fallback_keys: tuple[str, ...] = (),
+        default: bool = False,
+    ) -> bool:
+        keys = (primary_key, *tuple(fallback_keys or ()))
+        for key in keys:
+            if key not in self.extra_config:
+                continue
+            value = str(self.extra_config.get(key) or "").strip().lower()
+            if not value:
+                continue
+            return value in {"1", "true", "yes", "on"}
+        return bool(default)
         
     def _log(self, message: str, level: str = "info"):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -96,6 +113,11 @@ class AccessTokenOnlyRegistrationEngine:
 
     def run(self) -> RegistrationResult:
         result = RegistrationResult(success=False, logs=self.logs)
+        stop_at_about_you = self._read_bool_config(
+            "chatgpt_stop_at_about_you",
+            fallback_keys=("chatgpt_register_only_until_about_you",),
+            default=False,
+        )
         try:
             last_error = ""
             for attempt in range(self.max_retries):
@@ -127,6 +149,8 @@ class AccessTokenOnlyRegistrationEngine:
 
                     self._log(f"邮箱: {email_addr}, 密码: {pwd}")
                     self._log(f"注册信息: {first_name} {last_name}, 生日: {birthdate}")
+                    if stop_at_about_you:
+                        self._log("已启用仅注册模式：到达 about_you 后立即结束，不继续提取 workspace / token")
 
                     # 使用包装器为底层客户端提供接码服务
                     skymail_adapter = EmailServiceAdapter(self.email_service, email_addr, self._log)
@@ -142,7 +166,13 @@ class AccessTokenOnlyRegistrationEngine:
                     self._log("步骤 1/2: 执行注册状态机...")
 
                     success, msg = chatgpt_client.register_complete_flow(
-                        email_addr, pwd, first_name, last_name, birthdate, skymail_adapter
+                        email_addr,
+                        pwd,
+                        first_name,
+                        last_name,
+                        birthdate,
+                        skymail_adapter,
+                        stop_before_about_you_submission=stop_at_about_you,
                     )
 
                     if not success:
@@ -151,6 +181,26 @@ class AccessTokenOnlyRegistrationEngine:
                             self._log(f"注册流失败，准备整流程重试: {msg}")
                             continue
                         result.error_message = last_error
+                        return result
+
+                    if stop_at_about_you:
+                        if msg != "pending_about_you_submission":
+                            result.error_message = (
+                                "仅注册模式要求流程停在 about_you，但当前未到达该阶段: "
+                                f"{msg or 'unknown'}"
+                            )
+                            return result
+                        self._log("已按要求停在 about_you，结束流程")
+                        result.success = True
+                        result.account_id = ""
+                        result.source = "about_you_pending"
+                        result.metadata = {
+                            "browser_mode": self.browser_mode,
+                            "device_id": getattr(chatgpt_client, "device_id", ""),
+                            "chatgpt_registration_stage": "about_you",
+                            "chatgpt_registration_complete": False,
+                            "chatgpt_stop_at_about_you": True,
+                        }
                         return result
 
                     self._log("步骤 2/2: 复用注册会话，直接获取 ChatGPT Session / AccessToken...")

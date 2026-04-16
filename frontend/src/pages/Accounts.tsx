@@ -6,6 +6,7 @@ import {
   Input,
   InputNumber,
   Select,
+  Checkbox,
   Tag,
   Space,
   Modal,
@@ -791,6 +792,7 @@ export default function Accounts() {
         inbucket_api_url: cfg.inbucket_api_url,
         inbucket_domain: cfg.inbucket_domain,
         inbucket_mailbox_naming: cfg.inbucket_mailbox_naming,
+        chatgpt_stop_at_about_you: values.chatgpt_stop_at_about_you,
         cfworker_api_url: cfg.cfworker_api_url,
         cfworker_admin_token: cfg.cfworker_admin_token,
         cfworker_custom_auth: cfg.cfworker_custom_auth,
@@ -1517,12 +1519,21 @@ export default function Accounts() {
               <Input placeholder="demo 或 demo@mail.example.com" />
             </Form.Item>
             {currentPlatform === 'chatgpt' && (
-              <Form.Item label="ChatGPT Token 方案">
-                <ChatGPTRegistrationModeSwitch
-                  mode={chatgptRegistrationMode}
-                  onChange={setChatgptRegistrationMode}
-                />
-              </Form.Item>
+              <>
+                <Form.Item label="ChatGPT Token 方案">
+                  <ChatGPTRegistrationModeSwitch
+                    mode={chatgptRegistrationMode}
+                    onChange={setChatgptRegistrationMode}
+                  />
+                </Form.Item>
+                <Form.Item
+                  name="chatgpt_stop_at_about_you"
+                  valuePropName="checked"
+                  extra="勾选后只推进到 about-you，不继续 OAuth / workspace / token。"
+                >
+                  <Checkbox>仅注册到 about-you</Checkbox>
+                </Form.Item>
+              </>
             )}
             <Form.Item>
               <Button type="primary" htmlType="submit" block loading={registerLoading}>

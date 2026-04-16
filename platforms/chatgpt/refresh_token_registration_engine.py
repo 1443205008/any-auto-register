@@ -236,6 +236,23 @@ class RefreshTokenRegistrationEngine:
             return max(minimum, min(parsed, maximum))
         return max(minimum, min(int(default), maximum))
 
+    def _read_bool_config(
+        self,
+        primary_key: str,
+        *,
+        fallback_keys: tuple[str, ...] = (),
+        default: bool = False,
+    ) -> bool:
+        keys = (primary_key, *tuple(fallback_keys or ()))
+        for key in keys:
+            if key not in self.extra_config:
+                continue
+            value = str(self.extra_config.get(key) or "").strip().lower()
+            if not value:
+                continue
+            return value in {"1", "true", "yes", "on"}
+        return bool(default)
+
     @staticmethod
     def _should_switch_to_login_after_register_failure(message: str) -> bool:
         text = str(message or "").lower()
@@ -432,10 +449,48 @@ class RefreshTokenRegistrationEngine:
             "account_claims_email": account_info.get("email", ""),
         }
 
+    def _populate_result_for_about_you_stop(
+        self,
+        result: RegistrationResult,
+        *,
+        registration_message: str,
+        register_client: Any,
+    ) -> None:
+        result.success = True
+        result.email = self.email or ""
+        result.password = self.password or ""
+        result.account_id = ""
+        result.workspace_id = ""
+        result.access_token = ""
+        result.refresh_token = ""
+        result.id_token = ""
+        result.session_token = ""
+        result.source = "about_you_pending"
+        result.metadata = {
+            "email_service": self.email_service.service_type.value,
+            "proxy_used": self.proxy_url,
+            "registered_at": datetime.now().isoformat(),
+            "registration_message": registration_message,
+            "registration_flow": "chatgpt_client.register_complete_flow",
+            "token_flow": "",
+            "browser_mode": self.browser_mode,
+            "device_id": getattr(register_client, "device_id", ""),
+            "impersonate": getattr(register_client, "impersonate", ""),
+            "user_agent": getattr(register_client, "ua", ""),
+            "chatgpt_registration_stage": "about_you",
+            "chatgpt_registration_complete": False,
+            "chatgpt_stop_at_about_you": True,
+        }
+
     def run(self) -> RegistrationResult:
         result = RegistrationResult(success=False, logs=self.logs)
         last_error = ""
         fixed_email = str(self.email or "").strip()
+        stop_at_about_you = self._read_bool_config(
+            "chatgpt_stop_at_about_you",
+            fallback_keys=("chatgpt_register_only_until_about_you",),
+            default=False,
+        )
         register_otp_wait_seconds = self._read_int_config(
             "chatgpt_register_otp_wait_seconds",
             fallback_keys=("chatgpt_otp_wait_seconds",),
@@ -480,6 +535,8 @@ class RefreshTokenRegistrationEngine:
             self._log(f"密码: {self.password}")
             self._log(f"注册信息: {first_name} {last_name}, 生日: {birthdate}")
             self._log("流程策略: 注册阶段推进到 about_you 后切换到 OAuth 流程继续完成后续步骤")
+            if stop_at_about_you:
+                self._log("已启用仅注册模式：到达 about_you 后立即结束，不继续 OAuth / workspace")
             self._log(
                 "验证码等待策略: "
                 f"register_wait={register_otp_wait_seconds}s, "
@@ -541,6 +598,22 @@ class RefreshTokenRegistrationEngine:
                         "注册状态机返回成功但未停在 about_you。"
                         "将继续进入 OAuth 会话，按状态机实际返回推进。"
                     )
+
+            if stop_at_about_you:
+                if registered and registration_message == "pending_about_you_submission":
+                    self._log("已按要求停在 about_you，跳过后续 OAuth / workspace / token 流程")
+                    self._populate_result_for_about_you_stop(
+                        result,
+                        registration_message=registration_message,
+                        register_client=register_client,
+                    )
+                    return result
+                last_error = (
+                    "仅注册模式要求流程停在 about_you，但当前未到达该阶段: "
+                    f"{registration_message or source or 'unknown'}"
+                )
+                result.error_message = last_error
+                return result
 
             oauth_client = self._build_oauth_client()
             oauth_client.config.setdefault(

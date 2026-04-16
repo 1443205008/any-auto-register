@@ -546,7 +546,15 @@ def _run_register(task_id: str, req: RegisterTaskRequest):
                     _proxy_pool.report_success(_proxy)
                 _log(task_id, f"[OK] 注册成功: {account.email}")
                 _save_task_log(req.platform, account.email, "success")
-                _auto_upload_integrations(task_id, saved_account or account)
+                should_skip_auto_upload = False
+                if req.platform == "chatgpt" and isinstance(account.extra, dict):
+                    should_skip_auto_upload = not bool(
+                        account.extra.get("chatgpt_registration_complete", True)
+                    )
+                if should_skip_auto_upload:
+                    _log(task_id, "  [Auto Upload] 已启用仅注册模式，跳过自动上传外部系统")
+                else:
+                    _auto_upload_integrations(task_id, saved_account or account)
                 cashier_url = (account.extra or {}).get("cashier_url", "")
                 if cashier_url:
                     _log(task_id, f"  [升级链接] {cashier_url}")

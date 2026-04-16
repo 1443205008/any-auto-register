@@ -159,6 +159,7 @@ export default function RegisterTaskPage() {
       inbucket_api_url: values.inbucket_api_url,
       inbucket_domain: values.inbucket_domain,
       inbucket_mailbox_naming: values.inbucket_mailbox_naming,
+      chatgpt_stop_at_about_you: values.chatgpt_stop_at_about_you,
       cfworker_api_url: values.cfworker_api_url,
       cfworker_admin_token: values.cfworker_admin_token,
       cfworker_custom_auth: values.cfworker_custom_auth,
@@ -258,6 +259,7 @@ export default function RegisterTaskPage() {
         gptmail_base_url: 'https://mail.chatgpt.org.uk',
         cloudmail_timeout: 30,
         inbucket_mailbox_naming: 'local',
+        chatgpt_stop_at_about_you: false,
         count: 1,
         concurrency: 1,
         register_delay_seconds: 0,
@@ -307,12 +309,21 @@ export default function RegisterTaskPage() {
             </Form.Item>
           </Space>
           {platform === 'chatgpt' && (
-            <Form.Item label="ChatGPT Token 方案">
-              <ChatGPTRegistrationModeSwitch
-                mode={chatgptRegistrationMode}
-                onChange={setChatgptRegistrationMode}
-              />
-            </Form.Item>
+            <>
+              <Form.Item label="ChatGPT Token 方案">
+                <ChatGPTRegistrationModeSwitch
+                  mode={chatgptRegistrationMode}
+                  onChange={setChatgptRegistrationMode}
+                />
+              </Form.Item>
+              <Form.Item
+                name="chatgpt_stop_at_about_you"
+                valuePropName="checked"
+                extra="勾选后只推进到 about-you，不继续 OAuth / workspace / token；账号会保存为未完成状态。"
+              >
+                <Checkbox>仅注册到 about-you</Checkbox>
+              </Form.Item>
+            </>
           )}
         </Card>
 

@@ -106,6 +106,15 @@ class BaseChatGPTRegistrationModeAdapter(ABC):
         )
 
     def _build_account_extra(self, result) -> dict:
+        metadata = getattr(result, "metadata", None) or {}
+        registration_stage = str(
+            metadata.get("chatgpt_registration_stage")
+            or ("about_you" if getattr(result, "source", "") == "about_you_pending" else "")
+        ).strip()
+        registration_complete = metadata.get("chatgpt_registration_complete")
+        if registration_complete is None:
+            registration_complete = getattr(result, "source", "") != "about_you_pending"
+
         return {
             "access_token": getattr(result, "access_token", ""),
             "refresh_token": getattr(result, "refresh_token", ""),
@@ -115,6 +124,11 @@ class BaseChatGPTRegistrationModeAdapter(ABC):
             "chatgpt_registration_mode": self.mode,
             "chatgpt_has_refresh_token_solution": self.mode == CHATGPT_REGISTRATION_MODE_REFRESH_TOKEN,
             "chatgpt_token_source": getattr(result, "source", "register"),
+            "chatgpt_registration_stage": registration_stage,
+            "chatgpt_registration_complete": bool(registration_complete),
+            "chatgpt_stop_at_about_you": bool(
+                metadata.get("chatgpt_stop_at_about_you")
+            ),
         }
 
 
